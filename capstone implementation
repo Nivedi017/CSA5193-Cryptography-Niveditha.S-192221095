@@ -1,0 +1,105 @@
+CODE 
+#include <stdio.h> 
+#include <stdint.h> 
+#include <string.h> 
+ 
+#define Nb 4 
+#define Nk 4 
+#define Nr 10 
+ 
+// S-box static const uint8_t sbox[256] = { 0x63, 0x7c, 0x77, 0x7b, 0xf2, 0x6b, 0x6f, 0xc5, 0x30, 0x01, 0x67, 0x2b, 0xfe, 
+0xd7, 0xab, 0x76, 
+    // (remainder omitted for brevity) 
+}; 
+ 
+// Round constant static const uint8_t Rcon[11] = { 
+    0x00, 0x01, 0x02, 0x04, 0x08, 0x10, 0x20, 0x40, 0x80, 0x1B, 0x36 }; 
+ 
+uint8_t state[4][4]; uint8_t RoundKey[176]; 
+uint8_t Key[16] = {0x2b, 0x7e, 0x15, 0x16, 0x28, 0xae, 0xd2, 0xa6, 0xab, 0xf7, 0xcf, 0xfb, 0x4a, 0x8d, 0x28, 0xf8}; 
+ 
+void KeyExpansion() { 
+    uint32_t temp; 
+    int i = 0;     while (i < Nk) { 
+        RoundKey[i * 4 + 0] = Key[i * 4 + 0]; 
+        RoundKey[i * 4 + 1] = Key[i * 4 + 1]; 
+        RoundKey[i * 4 + 2] = Key[i * 4 + 2]; 
+        RoundKey[i * 4 + 3] = Key[i * 4 + 3]; 
+        i++; 
+}     i = Nk;     while (i < Nb * (Nr + 1)) { 
+        temp = RoundKey[(i - 1) * 4 + 0] << 24 | RoundKey[(i - 1) * 4 + 1] << 16 | 
+RoundKey[(i - 1) * 4 + 2] << 8 | RoundKey[(i - 1) * 4 + 3];         if (i % Nk == 0) { 
+            temp = (sbox[(temp >> 16) & 0xff] << 24) | (sbox[(temp >> 8) & 0xff] 
+<< 16) | (sbox[temp & 0xff] << 8) | sbox[(temp >> 24) & 0xff];             temp ^= Rcon[i / Nk] << 24; 
+        } 
+        RoundKey[i * 4 + 0] = RoundKey[(i - Nk) * 4 + 0] ^ (temp >> 24); 
+        RoundKey[i * 4 + 1] = RoundKey[(i - Nk) * 4 + 1] ^ (temp >> 16); 
+        RoundKey[i * 4 + 2] = RoundKey[(i - Nk) * 4 + 2] ^ (temp >> 8);         RoundKey[i * 4 + 3] = RoundKey[(i - Nk) * 4 + 3] ^ temp; 
+        i++; 
+    } 
+} 
+ 
+void AddRoundKey(uint8_t round) { 
+   int i,j; 
+    for (i = 0; i < 4; i++) {         for (j = 0; j < 4; j++) {             state[j][i] ^= RoundKey[round * Nb * 4 + i * Nb + j]; 
+        } 
+} 
+} 
+ 
+void SubBytes() { 
+    int i,j; 
+ 	for (i = 0; i < 4; i++) { 
+        for (j = 0; j < 4; j++) {             state[i][j] = sbox[state[i][j]]; 
+        } 
+    } 
+} 
+ 
+void ShiftRows() { 
+    uint8_t temp;     temp = state[1][0];     state[1][0] = state[1][1];     state[1][1] = state[1][2];     state[1][2] = state[1][3];     state[1][3] = temp; 
+ 
+    temp = state[2][0];     state[2][0] = state[2][2];     state[2][2] = temp; 
+temp = state[2][1];     state[2][1] = state[2][3];     state[2][3] = temp; 
+ 
+    temp = state[3][0];     state[3][0] = state[3][3];     state[3][3] = state[3][2];     state[3][2] = state[3][1];     state[3][1] = temp; 
+} 
+ 
+#define xtime(x) ((x<<1) ^ (((x>>7) & 1) * 0x1b)) 
+ 
+void MixColumns() { 
+    uint8_t Tmp, Tm, t; 
+    int i; 
+ 	for (i = 0; i < 4; i++) { 
+        t = state[0][i]; 
+        Tmp = state[0][i] ^ state[1][i] ^ state[2][i] ^ state[3][i]; 
+        Tm = state[0][i] ^ state[1][i]; Tm = xtime(Tm); state[0][i] ^= Tm ^ Tmp;         Tm = state[1][i] ^ state[2][i]; Tm = xtime(Tm); state[1][i] ^= Tm ^ Tmp; 
+        Tm = state[2][i] ^ state[3][i]; Tm = xtime(Tm); state[2][i] ^= Tm ^ Tmp; 
+        Tm = state[3][i] ^ t; Tm = xtime(Tm); state[3][i] ^= Tm ^ Tmp; 
+    } 
+} 
+ 
+void Cipher() {     uint8_t round = 0; 
+ 
+    AddRoundKey(0); 
+ 
+    for (round = 1; round < Nr; round++) { 
+        SubBytes(); 
+        ShiftRows(); 
+        MixColumns(); 
+        AddRoundKey(round); 
+    } 
+ 
+    SubBytes(); 
+    ShiftRows(); 
+    AddRoundKey(Nr); 
+} 
+ 
+int main() {     uint8_t input[] = "Customer:1234-5678-9012-3456"; // Example data     uint8_t encrypted[16]; 
+     
+    memcpy(state, input, 16); 
+    KeyExpansion();     Cipher();     memcpy(encrypted, state, 16); 
+ 
+    printf("Encrypted data: "); 
+    int i; 
+ 	for (i = 0; i < 16; i++) {         printf("%02x", encrypted[i]); 
+    } 
+    printf("\n"); return 0; } 
